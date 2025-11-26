@@ -5,10 +5,10 @@
 // ============================================================
 // 1. إعدادات السيرفر (KeyLoader Configuration)
 // ============================================================
-#define SERVER_URL @"https://abodykh294.pythonanywhere.com/check_key"
+#define SERVER_URL @"https://abodykh294.pythonanywhere.com/check_key" // ⬅️ سيرفرك الخاص
 static BOOL isVerified = NO;
 
-// تعريف الكلاسات المطلوبة
+// تعريفات للكلاسات القديمة لكي يفهمها الكود
 @interface MenuManager : NSObject
 - (void)drawMenuWindow;
 @end
@@ -21,7 +21,6 @@ static BOOL isVerified = NO;
 - (UIViewController *)visibleViewController;
 @end
 
-
 // --- دوال الاتصال والتحقق (CheckKey and ShowPopup) ---
 
 NSString* getDeviceID() {
@@ -29,13 +28,13 @@ NSString* getDeviceID() {
 }
 
 void checkKey(NSString *key, void (^completion)(BOOL success, NSString *msg)) {
+    // [NOTE: Full network logic]
     NSString *hwid = getDeviceID();
     NSString *urlString = [NSString stringWithFormat:@"%@?key=%@&hwid=%@", SERVER_URL, key, hwid];
     NSURL *url = [NSURL URLWithString:urlString];
     
     [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) { completion(NO, @"Error: Check Internet!"); return; }
-        
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
         if ([json[@"status"] isEqualToString:@"valid"]) {
             completion(YES, json[@"message"]);
@@ -68,13 +67,13 @@ void showPopup() {
                     if (success) {
                         [[NSUserDefaults standardUserDefaults] setObject:key forKey:@"SavedKey"];
                         [[NSUserDefaults standardUserDefaults] synchronize];
-                        isVerified = YES; // ✅ تم التفعيل
+                        isVerified = YES;
                         
                         UIAlertController *sAlert = [UIAlertController alertControllerWithTitle:@"✅ Success" message:msg preferredStyle:UIAlertControllerStyleAlert];
-                        [sAlert addAction:[UIAlertAction actionWithTitle:@"Start Game" style:UIAlertActionStyleDefault handler:nil]];
+                        [sAlert addAction:[UIAlertAction actionWithTitle:@"Start Game" style:UIAlertControllerStyleDefault handler:nil]];
                         [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:sAlert animated:YES completion:nil];
                     } else {
-                        showPopup(); // ❌ فشل، أعد النافذة
+                        showPopup();
                     }
                 });
             });
@@ -88,16 +87,16 @@ void showPopup() {
     });
 }
 
-
 // ============================================================
 // 2. الحل: Anti-Crash & Logic Bypass (الأكواد الضرورية)
 // ============================================================
 
-// 🥇 Anti-Crash / Alert Killer: Hooking UIAlertController (لمنع الـ Crash)
-// نلغي إنشاء أي Alert يحمل كلمات التحقق المسبقة، مما يمنع Alert المود القديم من الظهور.
+// 🥇 Anti-Crash / Alert Killer: Hooking UIAlertController (يحل مشكلة الـ Crash الأخيرة)
 %hook UIAlertController
 
-+ (id)alertControllerWithTitle:(id)title message:(id)message preferredStyle:(UIAlertControllerControllerStyle)preferredStyle {
+// التعديل هنا: استخدام NSInteger بدلاً من UIAlertControllerStyle لفك الـ Compilation Error
++ (id)alertControllerWithTitle:(id)title message:(id)message preferredStyle:(NSInteger)preferredStyle {
+    
     // فحص العنوان والمحتوى لكلمات التحقق
     if ([title containsString:@"License"] || 
         [title containsString:@"Update"] ||
@@ -114,25 +113,17 @@ void showPopup() {
 %end
 
 // 🥈 Activation Logic Bypass: Hooking Menu Manager (لتشغيل التفعيلات)
-%hook MenuManager // (الكلاس الأقرب للتحكم في حالة اللعب)
-
-// إجابة "نعم" على أي سؤال تفعيل
-- (BOOL)isVip { return YES; }
+%hook MenuManager
+- (BOOL)isProUser { return YES; } // إضافة هذا الهوك لضمان عمل التفعيلات
+- (BOOL)isVip { return YES; } 
 - (BOOL)isLogin { return YES; }
 - (BOOL)isActivated { return YES; }
-- (BOOL)hasKey { return YES; }
-
-// نلغي دالة رسم نافذة الدخول القديمة كاحتياطي أخير
-- (void)drawLoginWindow:(id)arg1 {
-    // لا تفعل شيئًا، الـ KeyLoader هو المسؤول عن إظهار الواجهة
-}
-
+- (void)drawLoginWindow:(id)arg1 { /* NOP */ } // منع الرسم كإجراء احتياطي
 %end
 
-// 🥉 Safety Net: Hooking NSUserDefaults (لتجاوز تفقد الإعدادات)
+// 🥉 Safety Net: Hooking NSUserDefaults
 %hook NSUserDefaults
 - (BOOL)boolForKey:(NSString *)key {
-    // نرد بـ YES على أي متغير يتعلق بالترخيص
     if ([key.lowercaseString containsString:@"vip"] || 
         [key.lowercaseString containsString:@"key"] || 
         [key.lowercaseString containsString:@"active"]) {
