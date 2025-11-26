@@ -1,0 +1,32 @@
+name: Build Tweak
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Theos
+        run: |
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
+          echo "THEOS=~/theos" >> $GITHUB_ENV
+
+      - name: Install SDKs
+        run: |
+          curl -LO https://github.com/theos/sdks/archive/master.zip
+          unzip master.zip
+          mv sdks-master/*.sdk ~/theos/sdks
+          rm master.zip
+
+      - name: Build .deb
+        run: |
+          export THEOS=~/theos
+          make package FINALPACKAGE=1
+
+      - name: Upload Deb
+        uses: actions/upload-artifact@v3
+        with:
+          name: KeyLoader-Deb
+          path: packages/*.deb
