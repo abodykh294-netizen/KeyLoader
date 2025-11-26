@@ -15,10 +15,8 @@ jobs:
 
       - name: Install SDKs
         run: |
-          curl -LO https://github.com/theos/sdks/archive/master.zip
-          unzip master.zip
-          mv sdks-master/*.sdk ~/theos/sdks
-          rm master.zip
+          rm -rf ~/theos/sdks
+          git clone --quiet --depth=1 https://github.com/theos/sdks.git ~/theos/sdks
 
       - name: Build .deb
         run: |
