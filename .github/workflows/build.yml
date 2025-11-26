@@ -1,30 +1,15 @@
-name: Build Tweak
+TARGET := iphone:clang:latest:14.0
+ARCHS = arm64 arm64e
 
-on: [push]
+include $(THEOS)/makefiles/common.mk
 
-jobs:
-  build:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
+TWEAK_NAME = KeyLoader
 
-      - name: Install Theos
-        run: |
-          bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
-          echo "THEOS=~/theos" >> $GITHUB_ENV
+# تأكد أن اسم الملف هنا يطابق اسم ملف الكود عندك (سواء Tweak.xm أو Tweak.x)
+KeyLoader_FILES = Tweak.xm
 
-      - name: Install SDKs
-        run: |
-          rm -rf ~/theos/sdks
-          git clone --quiet --depth=1 https://github.com/theos/sdks.git ~/theos/sdks
+# هنا التعديل السحري: أمرنا النظام بتجاهل تحذيرات الأكواد القديمة
+KeyLoader_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-error
+KeyLoader_FRAMEWORKS = UIKit Foundation
 
-      - name: Build .deb
-        run: |
-          export THEOS=~/theos
-          make package FINALPACKAGE=1
-
-      - name: Upload Deb
-        uses: actions/upload-artifact@v4
-        with:
-          name: KeyLoader-Deb
-          path: packages/*.deb
+include $(THEOS_MAKE_PATH)/tweak.mk
