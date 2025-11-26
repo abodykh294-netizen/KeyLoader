@@ -28,7 +28,7 @@ NSString* getDeviceID() {
 }
 
 void checkKey(NSString *key, void (^completion)(BOOL success, NSString *msg)) {
-    // [NOTE: Full network logic]
+    // [Note: Full network logic]
     NSString *hwid = getDeviceID();
     NSString *urlString = [NSString stringWithFormat:@"%@?key=%@&hwid=%@", SERVER_URL, key, hwid];
     NSURL *url = [NSURL URLWithString:urlString];
@@ -48,9 +48,10 @@ void showPopup() {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (isVerified) return;
 
+        // **التعديل هنا:** استخدام 1 بدلاً من UIAlertControllerStyleAlert
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 Security Check"
                                                                        message:@"Enter Your License Key"
-                                                                preferredStyle:UIAlertControllerStyleAlert];
+                                                                preferredStyle:1]; 
 
         [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
             textField.placeholder = @"Paste Key Here...";
@@ -58,7 +59,7 @@ void showPopup() {
             textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"SavedKey"];
         }];
 
-        UIAlertAction *loginAction = [UIAlertAction actionWithTitle:@"Login" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        UIAlertAction *verifyAction = [UIAlertAction actionWithTitle:@"Login" style:0 handler:^(UIAlertAction *action) { // 0 = Default
             NSString *key = alert.textFields.firstObject.text;
             alert.message = @"جاري التحقق..."; 
             
@@ -69,17 +70,29 @@ void showPopup() {
                         [[NSUserDefaults standardUserDefaults] synchronize];
                         isVerified = YES;
                         
-                        UIAlertController *sAlert = [UIAlertController alertControllerWithTitle:@"✅ Success" message:msg preferredStyle:UIAlertControllerStyleAlert];
-                        [sAlert addAction:[UIAlertAction actionWithTitle:@"Start Game" style:UIAlertControllerStyleDefault handler:nil]];
+                        UIAlertController *sAlert = [UIAlertController alertControllerWithTitle:@"✅ Success" message:msg preferredStyle:1];
+                        [sAlert addAction:[UIAlertAction actionWithTitle:@"Start Game" style:0 handler:nil]];
                         [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:sAlert animated:YES completion:nil];
                     } else {
-                        showPopup();
+                        UIAlertController *failAlert = [UIAlertController alertControllerWithTitle:@"❌ Error" message:msg preferredStyle:1];
+                        [failAlert addAction:[UIAlertAction actionWithTitle:@"Try Again" style:2 handler:^(UIAlertAction *action){ // 2 = Destructive
+                            showPopup();
+                        }]];
+                        [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:failAlert animated:YES completion:nil];
                     }
                 });
             });
         }];
+        
+        // زر شراء (اختياري)
+        UIAlertAction *buyAction = [UIAlertAction actionWithTitle:@"Buy Key" style:1 handler:^(UIAlertAction *action){ // 1 = Cancel
+            // (Note: Replace this with your Telegram/Site link)
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://t.me/YourChannel"] options:@{} completionHandler:nil];
+            showPopup();
+        }];
 
-        [alert addAction:loginAction];
+        [alert addAction:verifyAction];
+        [alert addAction:buyAction];
         
         UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
         while (topController.presentedViewController) topController = topController.presentedViewController;
@@ -88,7 +101,7 @@ void showPopup() {
 }
 
 // ============================================================
-// 2. الحل: Anti-Crash & Logic Bypass (الأكواد الضرورية)
+// 2. الحل: Anti-Crash & Logic Bypass (Final Hooks)
 // ============================================================
 
 // 🥇 Anti-Crash / Alert Killer: Hooking UIAlertController (يحل مشكلة الـ Crash الأخيرة)
@@ -114,7 +127,7 @@ void showPopup() {
 
 // 🥈 Activation Logic Bypass: Hooking Menu Manager (لتشغيل التفعيلات)
 %hook MenuManager
-- (BOOL)isProUser { return YES; } // إضافة هذا الهوك لضمان عمل التفعيلات
+- (BOOL)isProUser { return YES; } 
 - (BOOL)isVip { return YES; } 
 - (BOOL)isLogin { return YES; }
 - (BOOL)isActivated { return YES; }
