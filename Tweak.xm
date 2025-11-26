@@ -1,135 +1,126 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
+#import <substrate.h>
 
-// 🔴 رابط السيرفر بتاعك (تأكد إنه صح)
+// ==========================================================
+// الجزء الأول: إعدادات اللودر والسيرفر الجديد (بتاعك)
+// ==========================================================
+
 #define SERVER_URL @"https://abodykh294.pythonanywhere.com/check_key"
 
-// تعريف واجهة مساعدة
+static BOOL isVerified = NO;
+
+// تعريفات مساعدة
 @interface UIWindow (KeyLoader)
 - (UIViewController *)visibleViewController;
 @end
 
-// متغيرات لتتبع حالة التفعيل
-static BOOL isVerified = NO;
+// تعريف كلاس المود القديم عشان نقدر نستخدم دواله
+@interface OverlayManager : NSObject
+- (void)drawMenuWindow; // دالة رسم القائمة
+@end
 
-// --- 1. دالة لجلب معرف الجهاز (HWID) ---
+// 1. دالة جلب معرف الجهاز
 NSString* getDeviceID() {
     return [[[UIDevice currentDevice] identifierForVendor] UUIDString];
 }
 
-// --- 2. دالة الاتصال بالسيرفر والتحقق ---
+// 2. دالة التحقق من السيرفر
 void checkKey(NSString *key, void (^completion)(BOOL success, NSString *msg)) {
     NSString *hwid = getDeviceID();
-    
-    // تجهيز الرابط
     NSString *urlString = [NSString stringWithFormat:@"%@?key=%@&hwid=%@", SERVER_URL, key, hwid];
     NSURL *url = [NSURL URLWithString:urlString];
     
-    // إرسال الطلب
     [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) { completion(NO, @"تأكد من الإنترنت!"); return; }
         
-        // في حالة خطأ في النت
-        if (error) {
-            completion(NO, @"خطأ في الاتصال بالإنترنت!");
-            return;
-        }
-        
-        // قراءة الرد (JSON)
         NSError *jsonError;
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
         
-        if (jsonError || !json) {
-            completion(NO, @"خطأ في قراءة رد السيرفر");
-            return;
-        }
+        if (jsonError || !json) { completion(NO, @"خطأ في السيرفر"); return; }
         
         NSString *status = json[@"status"];
-        NSString *message = json[@"message"];
-        
-        // التحقق من الحالة
         if ([status isEqualToString:@"valid"]) {
-            completion(YES, message);
+            completion(YES, json[@"message"]);
         } else {
-            completion(NO, message);
+            completion(NO, json[@"message"]);
         }
     }] resume];
 }
 
-// --- 3. دالة إظهار النافذة المنبثقة ---
+// 3. دالة إظهار نافذة الحماية الخاصة بك
 void showPopup() {
-    // التأكد من أن الكود يعمل في الواجهة الرئيسية (Main Thread)
     dispatch_async(dispatch_get_main_queue(), ^{
-        
-        if (isVerified) return; // لو مفعل خلاص
+        if (isVerified) return;
 
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🛡️ تفعيل الحماية"
-                                                                       message:@"أدخل كود الاشتراك للمتابعة"
+                                                                       message:@"أدخل كود الاشتراك الخاص بك"
                                                                 preferredStyle:UIAlertControllerStyleAlert];
 
-        // خانة إدخال الكود
-        [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-            textField.placeholder = @"ألصق الكود هنا...";
+        [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+            textField.placeholder = @"الكود هنا...";
             textField.textAlignment = NSTextAlignmentCenter;
-            // استرجاع الكود المحفوظ قديماً لتسهيل الدخول
             textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"SavedKey"];
         }];
 
-        // زر التفعيل
-        UIAlertAction *verifyAction = [UIAlertAction actionWithTitle:@"دخول" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            
+        UIAlertAction *loginAction = [UIAlertAction actionWithTitle:@"دخول" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
             NSString *key = alert.textFields.firstObject.text;
-            
-            // رسالة انتظار
-            alert.message = @"جاري التحقق... ⏳";
-            
             checkKey(key, ^(BOOL success, NSString *msg) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (success) {
-                        // ✅ نجاح: حفظ الكود وفتح اللعبة
+                        // حفظ الكود وتفعيل المتغير
                         [[NSUserDefaults standardUserDefaults] setObject:key forKey:@"SavedKey"];
                         [[NSUserDefaults standardUserDefaults] synchronize];
-                        
                         isVerified = YES;
                         
-                        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"تم بنجاح ✅" message:msg preferredStyle:UIAlertControllerStyleAlert];
-                        [successAlert addAction:[UIAlertAction actionWithTitle:@"ابدأ اللعب" style:UIAlertActionStyleDefault handler:nil]];
-                        
-                        [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:successAlert animated:YES completion:nil];
-                        
+                        // رسالة نجاح
+                        UIAlertController *sAlert = [UIAlertController alertControllerWithTitle:@"✅ تم" message:msg preferredStyle:UIAlertControllerStyleAlert];
+                        [sAlert addAction:[UIAlertAction actionWithTitle:@"ابدأ" style:UIAlertActionStyleDefault handler:nil]];
+                        [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:sAlert animated:YES completion:nil];
                     } else {
-                        // ❌ فشل: إظهار الخطأ وإعادة النافذة
-                        UIAlertController *failAlert = [UIAlertController alertControllerWithTitle:@"خطأ ❌" message:msg preferredStyle:UIAlertControllerStyleAlert];
-                        [failAlert addAction:[UIAlertAction actionWithTitle:@"حاول مرة أخرى" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action){
-                            showPopup(); // إعادة إظهار النافذة لمنع الدخول
-                        }]];
-                        [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:failAlert animated:YES completion:nil];
+                        // إعادة المحاولة
+                        showPopup();
                     }
                 });
             });
         }];
 
-        // زر شراء (اختياري)
-        UIAlertAction *buyAction = [UIAlertAction actionWithTitle:@"شراء كود" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action){
-             [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://t.me/YourChannel"] options:@{} completionHandler:nil];
-             showPopup(); // إعادة النافذة
-        }];
-
-        [alert addAction:verifyAction];
-        [alert addAction:buyAction];
-        
-        // عرض النافذة فوق كل شيء
-        UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
-        while (topController.presentedViewController) {
-            topController = topController.presentedViewController;
-        }
-        [topController presentViewController:alert animated:YES completion:nil];
+        [alert addAction:loginAction];
+        [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:alert animated:YES completion:nil];
     });
 }
 
-// --- 4. نقطة البداية (Constructor) ---
+// ==========================================================
+// الجزء الثاني: خداع المود القديم (Hooking)
+// ==========================================================
+
+%hook OverlayManager
+
+// دي الدالة اللي المود بيناديها عشان يرسم نافذة "الكود القديم"
+// إحنا هنعترضها ونقوله: "لا، ارسم القائمة الأصلية بدالها"
+- (void)drawLoginWindow:(id)arg1 {
+    // 1. هل المستخدم عدى من اللودر بتاعك؟
+    if (isVerified) {
+        // لو مفعل، افتح القائمة علطول (كده تخطينا الكود القديم)
+        [self drawMenuWindow];
+    } else {
+        // لو مش مفعل، متعملش حاجة (شاشة فاضية) لحد ما اللودر يظهر
+        // أو ممكن نسيبها فاضية خالص عشان اللودر بتاعك هو اللي ظاهر
+    }
+}
+
+// زيادة تأكيد: بنقول للمود إن "التفعيل تمام" لو سأل
+- (BOOL)isLogin { return YES; }
+- (BOOL)isVip { return YES; }
+
+%end
+
+// ==========================================================
+// نقطة البداية
+// ==========================================================
 %ctor {
-    // تشغيل الكود بعد 4 ثواني من فتح اللعبة لضمان تحميل الواجهة
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    // تشغيل اللودر بتاعك بعد 5 ثواني
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         showPopup();
     });
 }
