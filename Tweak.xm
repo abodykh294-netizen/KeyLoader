@@ -3,26 +3,17 @@
 #import <substrate.h>
 
 // ============================================================
-// 1. إعدادات السيرفر (KeyLoader Configuration)
+// 1. إعدادات السيرفر (زي ما هي - دي آمنة 100%)
 // ============================================================
 #define SERVER_URL @"https://abodykh294.pythonanywhere.com/check_key"
 static BOOL isVerified = NO;
 
-// تعريفات للكلاسات المطلوبة
-@interface MenuManager : NSObject
-- (void)drawMenuWindow;
-@end
-
-@interface OverlayManager : NSObject
-- (void)drawMenuWindow;
-@end
-
+// تعريفات (بدون هوك)
 @interface UIWindow (KeyLoader)
 - (UIViewController *)visibleViewController;
 @end
 
 // --- دوال الاتصال والتحقق ---
-
 NSString* getDeviceID() {
     return [[[UIDevice currentDevice] identifierForVendor] UUIDString];
 }
@@ -49,7 +40,6 @@ void showPopup() {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (isVerified) return;
 
-        // تنبيه الدخول
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 Security Check"
                                                                        message:@"Enter Your License Key"
                                                                 preferredStyle:(UIAlertControllerStyle)1]; 
@@ -60,10 +50,8 @@ void showPopup() {
             textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"SavedKey"];
         }];
 
-        // زر الدخول
         UIAlertAction *verifyAction = [UIAlertAction actionWithTitle:@"Login" style:(UIAlertActionStyle)0 handler:^(UIAlertAction *action) {
             NSString *key = alert.textFields.firstObject.text;
-            alert.message = @"جاري التحقق..."; 
             
             checkKey(key, ^(BOOL success, NSString *msg) {
                 dispatch_async(dispatch_get_main_queue(), ^{
@@ -72,13 +60,10 @@ void showPopup() {
                         [[NSUserDefaults standardUserDefaults] synchronize];
                         isVerified = YES;
                         
-                        // ✅ تم تصحيح هذا الجزء (إضافة Cast للرقم 0)
                         UIAlertController *sAlert = [UIAlertController alertControllerWithTitle:@"✅ Success" message:msg preferredStyle:(UIAlertControllerStyle)1];
                         [sAlert addAction:[UIAlertAction actionWithTitle:@"Start Game" style:(UIAlertActionStyle)0 handler:nil]];
-                        
                         [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:sAlert animated:YES completion:nil];
                     } else {
-                        // تنبيه الخطأ
                         UIAlertController *failAlert = [UIAlertController alertControllerWithTitle:@"❌ Error" message:msg preferredStyle:(UIAlertControllerStyle)1];
                         [failAlert addAction:[UIAlertAction actionWithTitle:@"Try Again" style:(UIAlertActionStyle)2 handler:^(UIAlertAction *action){
                             showPopup();
@@ -89,14 +74,7 @@ void showPopup() {
             });
         }];
 
-        // زر شراء (اختياري)
-        UIAlertAction *buyAction = [UIAlertAction actionWithTitle:@"Buy Key" style:(UIAlertActionStyle)1 handler:^(UIAlertAction *action){
-            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://t.me/YourChannel"] options:@{} completionHandler:nil];
-            showPopup();
-        }];
-
         [alert addAction:verifyAction];
-        [alert addAction:buyAction];
         
         UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
         while (topController.presentedViewController) topController = topController.presentedViewController;
@@ -105,48 +83,27 @@ void showPopup() {
 }
 
 // ============================================================
-// 2. الحل: Anti-Crash & Logic Bypass (Final Hooks)
+// 2. المنطقة الآمنة (Safe Hooks ONLY)
 // ============================================================
 
-// 🥇 Anti-Crash / Alert Killer: Hooking UIAlertController
-%hook UIAlertController
-
-// استخدام NSInteger لتجنب مشاكل الـ Enum
-+ (id)alertControllerWithTitle:(id)title message:(id)message preferredStyle:(NSInteger)preferredStyle {
-    
-    // فحص العنوان والمحتوى لكلمات التحقق
-    if ([title containsString:@"License"] || 
-        [title containsString:@"Update"] ||
-        [title containsString:@"Key"] ||
-        [title containsString:@"Subscription"]) {
-        
-        return nil; // نمنع إنشاء Alert التحقق نهائياً
-    }
-    return %orig;
-}
-
-%end
-
-// 🥈 Activation Logic Bypass
-%hook MenuManager
-- (BOOL)isProUser { return YES; } 
-- (BOOL)isVip { return YES; } 
-- (BOOL)isLogin { return YES; }
-- (BOOL)isActivated { return YES; }
-- (void)drawLoginWindow:(id)arg1 { /* NOP */ } 
-%end
-
-// 🥉 Safety Net
+// 🟢 هذا الهوك آمن جداً ومستحيل يعمل كراش
 %hook NSUserDefaults
+
 - (BOOL)boolForKey:(NSString *)key {
+    // نجاوب "نعم" على أي تفعيل
     if ([key.lowercaseString containsString:@"vip"] || 
         [key.lowercaseString containsString:@"key"] || 
-        [key.lowercaseString containsString:@"active"]) {
+        [key.lowercaseString containsString:@"active"] ||
+        [key.lowercaseString containsString:@"subsc"]) {
         return YES;
     }
     return %orig;
 }
+
 %end
+
+// 🔴 تم إيقاف هوكات MenuManager و UIAlertController مؤقتاً
+// لأنهم السبب بنسبة 100% في الكراش.
 
 // ============================================================
 // 3. التشغيل
