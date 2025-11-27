@@ -1,52 +1,27 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <substrate.h>
-#import <mach-o/dyld.h>
 
+// ============================================================
+// 1. إعدادات السيرفر (KeyLoader Configuration)
+// ============================================================
 #define SERVER_URL @"https://abodykh294.pythonanywhere.com/check_key"
 static BOOL isVerified = NO;
 
-// ============================================================
-// 1. تعريفات ومجموعات الهوك (Groups)
-// ============================================================
+// تعريفات للكلاسات المطلوبة
+@interface MenuManager : NSObject
+- (void)drawMenuWindow;
+@end
 
-// --- مجموعة 1: هوك المود القديم (الخطير) ---
-%group WizardHooks
+@interface OverlayManager : NSObject
+- (void)drawMenuWindow;
+@end
 
-%hook SCLAlertViewBuilder
-- (id)show { return nil; } // اقتل النافذة
-- (id)alertIsReady { return nil; }
-%end
+@interface UIWindow (KeyLoader)
+- (UIViewController *)visibleViewController;
+@end
 
-%hook MenuManager
-- (BOOL)isVip { return YES; }
-- (BOOL)isProUser { return YES; }
-- (BOOL)isLogin { return YES; }
-%end
-
-%end // نهاية المجموعة الخطيرة
-
-
-// --- مجموعة 2: هوك النظام (الآمن) ---
-%group SystemHooks
-
-%hook NSUserDefaults
-- (BOOL)boolForKey:(NSString *)key {
-    if ([key.lowercaseString containsString:@"vip"] || 
-        [key.lowercaseString containsString:@"key"] || 
-        [key.lowercaseString containsString:@"active"]) {
-        return YES;
-    }
-    return %orig;
-}
-%end
-
-%end // نهاية المجموعة الآمنة
-
-
-// ============================================================
-// 2. دوال السيرفر والنافذة (بتاعتك)
-// ============================================================
+// --- دوال الاتصال والتحقق ---
 
 NSString* getDeviceID() {
     return [[[UIDevice currentDevice] identifierForVendor] UUIDString];
@@ -58,8 +33,10 @@ void checkKey(NSString *key, void (^completion)(BOOL success, NSString *msg)) {
     NSURL *url = [NSURL URLWithString:urlString];
     
     [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) { completion(NO, @"Check Internet"); return; }
+        if (error) { completion(NO, @"Error: Check Internet!"); return; }
+        
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+        
         if ([json[@"status"] isEqualToString:@"valid"]) {
             completion(YES, json[@"message"]);
         } else {
@@ -72,56 +49,104 @@ void showPopup() {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (isVerified) return;
 
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 Security"
-                                                                       message:@"Enter Key"
-                                                                preferredStyle:(UIAlertControllerStyle)1];
+        // 1. التنبيه الرئيسي
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 Security Check"
+                                                                       message:@"Enter Your License Key"
+                                                                preferredStyle:(UIAlertControllerStyle)1]; 
 
         [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-            textField.placeholder = @"Key";
-            textField.textAlignment = 1;
+            textField.placeholder = @"Paste Key Here...";
+            textField.textAlignment = NSTextAlignmentCenter;
             textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"SavedKey"];
         }];
 
-        UIAlertAction *act = [UIAlertAction actionWithTitle:@"Login" style:(UIAlertActionStyle)0 handler:^(UIAlertAction *action) {
-            checkKey(alert.textFields.firstObject.text, ^(BOOL success, NSString *msg) {
+        // 2. زر الدخول
+        UIAlertAction *verifyAction = [UIAlertAction actionWithTitle:@"Login" style:(UIAlertActionStyle)0 handler:^(UIAlertAction *action) {
+            NSString *key = alert.textFields.firstObject.text;
+            alert.message = @"جاري التحقق..."; 
+            
+            checkKey(key, ^(BOOL success, NSString *msg) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (success) {
-                        [[NSUserDefaults standardUserDefaults] setObject:alert.textFields[0].text forKey:@"SavedKey"];
+                        [[NSUserDefaults standardUserDefaults] setObject:key forKey:@"SavedKey"];
                         [[NSUserDefaults standardUserDefaults] synchronize];
                         isVerified = YES;
                         
-                        UIAlertController *s = [UIAlertController alertControllerWithTitle:@"✅ Success" message:nil preferredStyle:1];
-                        [s addAction:[UIAlertAction actionWithTitle:@"Start" style:0 handler:nil]];
-                        [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:s animated:YES completion:nil];
+                        UIAlertController *sAlert = [UIAlertController alertControllerWithTitle:@"✅ Success" message:msg preferredStyle:(UIAlertControllerStyle)1];
+                        
+                        // ✅ تم تصحيح الخطأ هنا (إضافة UIAlertActionStyle)
+                        [sAlert addAction:[UIAlertAction actionWithTitle:@"Start Game" style:(UIAlertActionStyle)0 handler:nil]];
+                        
+                        [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:sAlert animated:YES completion:nil];
                     } else {
-                        showPopup();
+                        UIAlertController *failAlert = [UIAlertController alertControllerWithTitle:@"❌ Error" message:msg preferredStyle:(UIAlertControllerStyle)1];
+                        [failAlert addAction:[UIAlertAction actionWithTitle:@"Try Again" style:(UIAlertActionStyle)2 handler:^(UIAlertAction *action){
+                            showPopup();
+                        }]];
+                        [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:failAlert animated:YES completion:nil];
                     }
                 });
             });
         }];
-        [alert addAction:act];
-        [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:alert animated:YES completion:nil];
+
+        // 3. زر الشراء
+        UIAlertAction *buyAction = [UIAlertAction actionWithTitle:@"Buy Key" style:(UIAlertActionStyle)1 handler:^(UIAlertAction *action){
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://t.me/YourChannel"] options:@{} completionHandler:nil];
+            showPopup();
+        }];
+
+        [alert addAction:verifyAction];
+        [alert addAction:buyAction];
+        
+        UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
+        while (topController.presentedViewController) topController = topController.presentedViewController;
+        [topController presentViewController:alert animated:YES completion:nil];
     });
 }
 
 // ============================================================
-// 3. التشغيل الذكي (Smart Initialization)
+// 2. Hooks لمنع الكراش وتشغيل التفعيلات
+// ============================================================
+
+%hook UIAlertController
+
+// استخدام NSInteger لتفادي أخطاء التجميع
++ (id)alertControllerWithTitle:(id)title message:(id)message preferredStyle:(NSInteger)preferredStyle {
+    if ([title containsString:@"License"] || 
+        [title containsString:@"Update"] ||
+        [title containsString:@"Key"] ||
+        [title containsString:@"Subscription"]) {
+        return nil; 
+    }
+    return %orig;
+}
+
+%end
+
+%hook MenuManager
+- (BOOL)isProUser { return YES; } 
+- (BOOL)isVip { return YES; } 
+- (BOOL)isLogin { return YES; }
+- (BOOL)isActivated { return YES; }
+- (void)drawLoginWindow:(id)arg1 { } 
+%end
+
+%hook NSUserDefaults
+- (BOOL)boolForKey:(NSString *)key {
+    if ([key.lowercaseString containsString:@"vip"] || 
+        [key.lowercaseString containsString:@"key"] || 
+        [key.lowercaseString containsString:@"active"]) {
+        return YES;
+    }
+    return %orig;
+}
+%end
+
+// ============================================================
+// 3. التشغيل
 // ============================================================
 %ctor {
-    // 1. شغل الهوكات الآمنة (النظام) فوراً
-    %init(SystemHooks);
-
-    // 2. انتظر ثانية واحدة حتى يتم تحميل المود القديم، ثم شغل الهوكات الخطيرة
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        
-        // التحقق من وجود الكلاس قبل الهجوم عليه (لمنع الكراش)
-        if (objc_getClass("SCLAlertViewBuilder")) {
-            %init(WizardHooks); // شغل الهجوم فقط لو الكلاس موجود
-        } else {
-            NSLog(@"[KeyLoader] Warning: Old Mod class not found!");
-        }
-        
-        // شغل نافذتك
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         showPopup();
     });
 }
