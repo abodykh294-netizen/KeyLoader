@@ -1,28 +1,20 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <substrate.h>
+#import <mach/mach.h>
+#import <mach-o/dyld.h>
 
 // ============================================================
-// 1. إعدادات السيرفر (KeyLoader Configuration)
+// 1. إعدادات السيرفر (KeyLoader)
 // ============================================================
 #define SERVER_URL @"https://abodykh294.pythonanywhere.com/check_key"
 static BOOL isVerified = NO;
-
-// تعريفات للكلاسات المطلوبة
-@interface MenuManager : NSObject
-- (void)drawMenuWindow;
-@end
-
-@interface OverlayManager : NSObject
-- (void)drawMenuWindow;
-@end
 
 @interface UIWindow (KeyLoader)
 - (UIViewController *)visibleViewController;
 @end
 
-// --- دوال الاتصال والتحقق ---
-
+// --- دوال الاتصال ---
 NSString* getDeviceID() {
     return [[[UIDevice currentDevice] identifierForVendor] UUIDString];
 }
@@ -45,26 +37,59 @@ void checkKey(NSString *key, void (^completion)(BOOL success, NSString *msg)) {
     }] resume];
 }
 
+// ============================================================
+// 2. دالة تفعيل الهاك (Master Switch Patch) 💉
+// ============================================================
+void enable_cheats() {
+    // 1. الأوفست اللي حسبناه من Ghidra (0x1c3c688 + 8)
+    uint64_t offset = 0x1C3C690; 
+
+    // 2. حساب المكان الحقيقي
+    uint64_t slide = _dyld_get_image_vmaddr_slide(0);
+    uint64_t address = slide + offset;
+
+    // 3. القيمة (1 = مفعل / VIP)
+    unsigned char value = 1;
+
+    // 4. الحقن في الذاكرة
+    kern_return_t err;
+    mach_port_t port = mach_task_self();
+    
+    // فك الحماية
+    err = vm_protect(port, (vm_address_t)address, sizeof(value), NO, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+    if (err != KERN_SUCCESS) {
+        NSLog(@"[TakeCare] Failed to unprotect!");
+        return;
+    }
+
+    // كتابة التفعيل
+    err = vm_write(port, (vm_address_t)address, (vm_offset_t)&value, sizeof(value));
+    
+    // إرجاع الحماية
+    vm_protect(port, (vm_address_t)address, sizeof(value), NO, VM_PROT_READ | VM_PROT_EXECUTE);
+    
+    NSLog(@"[TakeCare] HACK ACTIVATED! 🔓🔥");
+}
+
+// ============================================================
+// 3. نافذة الدخول (Popup)
+// ============================================================
 void showPopup() {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (isVerified) return;
 
-        // 1. التنبيه الرئيسي
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 Security Check"
-                                                                       message:@"Enter Your License Key"
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 PUBG Mod"
+                                                                       message:@"Enter Key"
                                                                 preferredStyle:(UIAlertControllerStyle)1]; 
 
         [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-            textField.placeholder = @"Paste Key Here...";
+            textField.placeholder = @"Key...";
             textField.textAlignment = NSTextAlignmentCenter;
             textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"SavedKey"];
         }];
 
-        // 2. زر الدخول
         UIAlertAction *verifyAction = [UIAlertAction actionWithTitle:@"Login" style:(UIAlertActionStyle)0 handler:^(UIAlertAction *action) {
             NSString *key = alert.textFields.firstObject.text;
-            alert.message = @"جاري التحقق..."; 
-            
             checkKey(key, ^(BOOL success, NSString *msg) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (success) {
@@ -72,31 +97,21 @@ void showPopup() {
                         [[NSUserDefaults standardUserDefaults] synchronize];
                         isVerified = YES;
                         
+                        // 🔥🔥 هنا اللحظة الحاسمة: تشغيل الهاك بعد قبول الكود
+                        enable_cheats(); 
+                        
                         UIAlertController *sAlert = [UIAlertController alertControllerWithTitle:@"✅ Success" message:msg preferredStyle:(UIAlertControllerStyle)1];
-                        
-                        // ✅ تم تصحيح الخطأ هنا (إضافة UIAlertActionStyle)
-                        [sAlert addAction:[UIAlertAction actionWithTitle:@"Start Game" style:(UIAlertActionStyle)0 handler:nil]];
-                        
+                        [sAlert addAction:[UIAlertAction actionWithTitle:@"GO" style:(UIAlertActionStyle)0 handler:nil]];
                         [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:sAlert animated:YES completion:nil];
                     } else {
-                        UIAlertController *failAlert = [UIAlertController alertControllerWithTitle:@"❌ Error" message:msg preferredStyle:(UIAlertControllerStyle)1];
-                        [failAlert addAction:[UIAlertAction actionWithTitle:@"Try Again" style:(UIAlertActionStyle)2 handler:^(UIAlertAction *action){
-                            showPopup();
-                        }]];
-                        [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:failAlert animated:YES completion:nil];
+                        // إعادة المحاولة
+                        showPopup();
                     }
                 });
             });
         }];
 
-        // 3. زر الشراء
-        UIAlertAction *buyAction = [UIAlertAction actionWithTitle:@"Buy Key" style:(UIAlertActionStyle)1 handler:^(UIAlertAction *action){
-            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://t.me/YourChannel"] options:@{} completionHandler:nil];
-            showPopup();
-        }];
-
         [alert addAction:verifyAction];
-        [alert addAction:buyAction];
         
         UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
         while (topController.presentedViewController) topController = topController.presentedViewController;
@@ -105,32 +120,22 @@ void showPopup() {
 }
 
 // ============================================================
-// 2. Hooks لمنع الكراش وتشغيل التفعيلات
+// 4. هوكات مساعدة (Anti-Crash & Fake VIP)
 // ============================================================
 
+// نقتل نافذة التحذير القديمة لو ظهرت
 %hook UIAlertController
-
-// استخدام NSInteger لتفادي أخطاء التجميع
 + (id)alertControllerWithTitle:(id)title message:(id)message preferredStyle:(NSInteger)preferredStyle {
     if ([title containsString:@"License"] || 
-        [title containsString:@"Update"] ||
         [title containsString:@"Key"] ||
-        [title containsString:@"Subscription"]) {
+        [message containsString:@"expired"]) {
         return nil; 
     }
     return %orig;
 }
-
 %end
 
-%hook MenuManager
-- (BOOL)isProUser { return YES; } 
-- (BOOL)isVip { return YES; } 
-- (BOOL)isLogin { return YES; }
-- (BOOL)isActivated { return YES; }
-- (void)drawLoginWindow:(id)arg1 { } 
-%end
-
+// نخدع الذاكرة كاحتياطي
 %hook NSUserDefaults
 - (BOOL)boolForKey:(NSString *)key {
     if ([key.lowercaseString containsString:@"vip"] || 
@@ -143,10 +148,10 @@ void showPopup() {
 %end
 
 // ============================================================
-// 3. التشغيل
+// 5. التشغيل
 // ============================================================
 %ctor {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         showPopup();
     });
 }
