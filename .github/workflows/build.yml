@@ -8,19 +8,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Theos
+      - name: Prepare Theos
         run: |
-          bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
+          # تحميل Theos يدوياً بدون السكربت الفاشل
+          git clone --recursive https://github.com/theos/theos.git ~/theos
           echo "THEOS=~/theos" >> $GITHUB_ENV
 
       - name: Install SDKs
         run: |
-          rm -rf ~/theos/sdks
-          git clone --quiet --depth=1 https://github.com/theos/sdks.git ~/theos/sdks
+          # تحميل الـ SDKs يدوياً وفك الضغط
+          curl -LO https://github.com/theos/sdks/archive/master.zip
+          unzip -q master.zip
+          mv sdks-master/*.sdk ~/theos/sdks
+          rm master.zip
 
       - name: Build .deb
         run: |
           export THEOS=~/theos
+          # تجاهل الأخطاء القديمة وبناء الملف
           make package FINALPACKAGE=1
 
       - name: Upload Deb
