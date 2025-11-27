@@ -8,7 +8,7 @@
 #define SERVER_URL @"https://abodykh294.pythonanywhere.com/check_key" // ⬅️ سيرفرك الخاص
 static BOOL isVerified = NO;
 
-// تعريفات للكلاسات القديمة لكي يفهمها الكود
+// تعريفات للكلاسات المطلوبة
 @interface MenuManager : NSObject
 - (void)drawMenuWindow;
 @end
@@ -35,7 +35,10 @@ void checkKey(NSString *key, void (^completion)(BOOL success, NSString *msg)) {
     
     [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) { completion(NO, @"Error: Check Internet!"); return; }
-        NSDictionary *json = [NSSerialization JSONObjectWithData:data options:0 error:nil];
+        
+        // ✅ تم تصحيح الخطأ هنا (NSJSONSerialization)
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+        
         if ([json[@"status"] isEqualToString:@"valid"]) {
             completion(YES, json[@"message"]);
         } else {
