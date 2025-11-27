@@ -1,9 +1,9 @@
-Package: com.abody.keyloader
-Name: KeyLoader
+Package: com.abody.pubgloader
+Name: PUBG KeyLoader
 Depends: mobilesubstrate
 Version: 1.0.0
 Architecture: iphoneos-arm
-Description: An awesome key loader tweak!
+Description: PUBG Mod Loader by Abody
 Maintainer: Abody
 Author: Abody
 Section: Tweaks
