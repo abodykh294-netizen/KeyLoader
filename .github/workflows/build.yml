@@ -10,22 +10,23 @@ jobs:
 
       - name: Prepare Theos
         run: |
-          # تحميل Theos يدوياً بدون السكربت الفاشل
           git clone --recursive https://github.com/theos/theos.git ~/theos
           echo "THEOS=~/theos" >> $GITHUB_ENV
 
       - name: Install SDKs
         run: |
-          # تحميل الـ SDKs يدوياً وفك الضغط
           curl -LO https://github.com/theos/sdks/archive/master.zip
           unzip -q master.zip
           mv sdks-master/*.sdk ~/theos/sdks
           rm master.zip
 
+      - name: Install ldid
+        run: |
+          brew install ldid
+
       - name: Build .deb
         run: |
           export THEOS=~/theos
-          # تجاهل الأخطاء القديمة وبناء الملف
           make package FINALPACKAGE=1
 
       - name: Upload Deb
