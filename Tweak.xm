@@ -1,95 +1,67 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <substrate.h>
-#import <mach/mach.h>
-#import <mach-o/dyld.h>
 
 // ============================================================
-// 1. نظام السيرفر (KeyLoader) - حمايتك الخاصة
+// 1. سيرفرك (النافذة بتاعتك)
 // ============================================================
 #define SERVER_URL @"https://abodykh294.pythonanywhere.com/check_key"
 static BOOL isVerified = NO;
 
-// (هنا بنحط نفس دوال checkKey و showPopup و getDeviceID اللي في الأكواد اللي فاتت)
-// ... اختصاراً للمساحة، حطهم هنا ...
+// (حط هنا دوال getDeviceID و checkKey و showPopup اللي كانت معاك)
+// ... اختصاراً للمساحة ...
 
 // ============================================================
-// 2. محرك الغش (Memory Patcher)
+// 2. الجوكر: قتل حماية المود القديم (بدون كراش)
 // ============================================================
-// الدالة دي هي "المفك" اللي بيربط المسمار
-void patch_memory(uint64_t offset, uint32_t value) {
-    uint64_t slide = _dyld_get_image_vmaddr_slide(0);
-    uint64_t address = slide + offset;
 
-    kern_return_t err;
-    mach_port_t port = mach_task_self();
-    
-    // 1. فك الحماية
-    err = vm_protect(port, (vm_address_t)address, sizeof(value), NO, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-    if (err != KERN_SUCCESS) return;
-
-    // 2. الكتابة
-    err = vm_write(port, (vm_address_t)address, (vm_offset_t)&value, sizeof(value));
-    
-    // 3. قفل الحماية تاني
-    err = vm_protect(port, (vm_address_t)address, sizeof(value), NO, VM_PROT_READ | VM_PROT_EXECUTE);
-}
-
-// ============================================================
-// 3. التفعيلات (Features)
-// ============================================================
-bool isLongLine = false;
-
-// 🔴 هنا المكان اللي هنحط فيه الرقم اللي هنجيبه
-// مثال: 0x1005A20
-#define OFFSET_GUIDELINE  0x0  // <-- غير الصفر ده بالرقم اللي هنجيبه
-
-void toggleLongLine() {
-    isLongLine = !isLongLine;
-    if (isLongLine) {
-        // تفعيل: نغير القيمة لرقم كبير (مثلاً تعليمة MOV بقيمة عالية)
-        // القيمة دي (0x42480000) هي الهكس بتاع 50.0 float
-        // بس ده لو بنحقن قيمة، لو بنعدل تعليمة هنحتاج كود تاني
-        // الأسهل: NOP لإلغاء الحد الأقصى
-        // patch_memory(OFFSET_GUIDELINE, 0xD503201F); 
-    } else {
-        // إيقاف: نرجع الكود الأصلي (لازم نكون عارفينه)
+// أ. خداع الذاكرة (أي مود بيسأل الذاكرة: هل أنا مفعل؟)
+%hook NSUserDefaults
+- (BOOL)boolForKey:(NSString *)key {
+    // لو السؤال فيه ريحة تفعيل، قول "أيوه"
+    if ([key.lowercaseString containsString:@"vip"] || 
+        [key.lowercaseString containsString:@"active"] || 
+        [key.lowercaseString containsString:@"key"] ||
+        [key.lowercaseString containsString:@"license"]) {
+        return YES; 
     }
+    return %orig;
 }
-
-// ============================================================
-// 4. القائمة (Menu)
-// ============================================================
-void showMenu() {
-    if (!isVerified) return;
-
-    UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"🎱 TakeCare Mod"
-                                                                  message:@"Select Features"
-                                                           preferredStyle:0]; // ActionSheet
-
-    NSString *lineState = isLongLine ? @"[ON] Long Line" : @"[OFF] Long Line";
-    [menu addAction:[UIAlertAction actionWithTitle:lineState style:0 handler:^(UIAlertAction *action) {
-        toggleLongLine();
-        showMenu();
-    }]];
-
-    [menu addAction:[UIAlertAction actionWithTitle:@"Close" style:1 handler:nil]];
-    [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:menu animated:YES completion:nil];
-}
-
-// فتح القائمة بـ 3 أصابع
-%hook UIView
--(void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    %orig;
-    if ([[event allTouches] count] == 3) showMenu();
+// لو سأل عن توكن أو سترنج
+- (id)objectForKey:(NSString *)key {
+    if ([key.lowercaseString containsString:@"token"] || 
+        [key.lowercaseString containsString:@"user"]) {
+        return @"User_Hacked_By_Abody";
+    }
+    return %orig;
 }
 %end
 
+// ب. قتل نافذة التنبيه القديمة (عشان متظهرش وتطلب كود)
+%hook UIAlertController
++ (id)alertControllerWithTitle:(id)title message:(id)message preferredStyle:(NSInteger)preferredStyle {
+    if ([title containsString:@"License"] || 
+        [title containsString:@"Key"] ||
+        [message containsString:@"Enter"] ||
+        [title containsString:@"Security"]) {
+        return nil; // اقتل النافذة دي
+    }
+    return %orig;
+}
+%end
+
+// ج. محاولة أخيرة على كلاسات مشهورة (لو موجودة هتتفعل، لو مش موجودة مش هتضر)
+%hook MenuManager
+- (BOOL)isVip { return YES; }
+- (BOOL)isLogin { return YES; }
+%end
+
 // ============================================================
-// 5. التشغيل
+// 3. التشغيل
 // ============================================================
 %ctor {
+    // شغل نافذتك أنت بعد 5 ثواني
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        // showPopup(); // شغل دي لما تخلص
+        // showPopup(); 
     });
 }
