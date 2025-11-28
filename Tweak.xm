@@ -1,19 +1,17 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <substrate.h>
+#import <mach/mach.h>
+#import <mach-o/dyld.h>
 
 // ============================================================
-// 1. إعدادات السيرفر (KeyLoader Configuration)
+// 1. إعدادات السيرفر (KeyLoader)
 // ============================================================
-#define SERVER_URL @"https://abodykh294.pythonanywhere.com/check_key" // ⬅️ سيرفرك الخاص
+#define SERVER_URL @"https://abodykh294.pythonanywhere.com/check_key"
 static BOOL isVerified = NO;
 
-// تعريفات للكلاسات المطلوبة
+// تعريفات
 @interface MenuManager : NSObject
-- (void)drawMenuWindow;
-@end
-
-@interface OverlayManager : NSObject
 - (void)drawMenuWindow;
 @end
 
@@ -21,14 +19,12 @@ static BOOL isVerified = NO;
 - (UIViewController *)visibleViewController;
 @end
 
-// --- دوال الاتصال والتحقق ---
-
+// --- دوال الاتصال ---
 NSString* getDeviceID() {
     return [[[UIDevice currentDevice] identifierForVendor] UUIDString];
 }
 
 void checkKey(NSString *key, void (^completion)(BOOL success, NSString *msg)) {
-    // [Network Logic]
     NSString *hwid = getDeviceID();
     NSString *urlString = [NSString stringWithFormat:@"%@?key=%@&hwid=%@", SERVER_URL, key, hwid];
     NSURL *url = [NSURL URLWithString:urlString];
@@ -37,7 +33,6 @@ void checkKey(NSString *key, void (^completion)(BOOL success, NSString *msg)) {
         if (error) { completion(NO, @"Error: Check Internet!"); return; }
         
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-        
         if ([json[@"status"] isEqualToString:@"valid"]) {
             completion(YES, json[@"message"]);
         } else {
@@ -46,26 +41,75 @@ void checkKey(NSString *key, void (^completion)(BOOL success, NSString *msg)) {
     }] resume];
 }
 
+// ============================================================
+// 2. محرك الغش (Guideline Prediction Engine) 🎱
+// ============================================================
+
+// دالة البحث عن النمط (Pattern Scanning)
+// تبحث عن الرقم 3.0 (طول الخط الأصلي) وتغيره لـ 50.0
+void enable_prediction() {
+    // 1. تحديد مساحة البحث (نص الكود في الذاكرة)
+    uint64_t slide = _dyld_get_image_vmaddr_slide(0);
+    const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(0);
+    uint64_t startAddr = (uint64_t)header;
+    uint64_t endAddr = startAddr + 0x4000000; // بحث في أول 64 ميجا (كافية)
+
+    // 2. الأكواد السحرية (ARM64 Hex)
+    // FMOV S0, #3.0  => 00 10 28 1E
+    // FMOV S0, #50.0 => 00 00 48 42 (قيمة تقريبية) أو نستخدم MOVK لتغيير السجل
+    
+    // للتبسيط والقوة: سنبحث عن القيمة 3.0 كـ Float ونغيرها
+    // Float 3.0 = 0x40400000
+    unsigned int originalValue = 0x40400000; 
+    unsigned int newValue = 0x42480000; // Float 50.0
+
+    int patchCount = 0;
+    kern_return_t err;
+    mach_port_t port = mach_task_self();
+
+    for (uint64_t addr = startAddr; addr < endAddr; addr += 4) {
+        unsigned int currentHex = *(unsigned int *)addr;
+        
+        // إذا وجدنا كود يمثل 3.0
+        if (currentHex == originalValue) {
+            // نتأكد أنه ليس في منطقة النظام (اختياري)
+            
+            // 3. التعديل (Patch)
+            err = vm_protect(port, (vm_address_t)addr, sizeof(newValue), NO, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+            if (err == KERN_SUCCESS) {
+                vm_write(port, (vm_address_t)addr, (vm_offset_t)&newValue, sizeof(newValue));
+                vm_protect(port, (vm_address_t)addr, sizeof(newValue), NO, VM_PROT_READ | VM_PROT_EXECUTE);
+                patchCount++;
+            }
+        }
+    }
+    
+    // تفعيل إضافي: محاولة Hook كلاسات معروفة إذا وجدت (بدون كراش)
+    if (objc_getClass("GameWorld")) {
+        // سنقوم بتفعيل الهوك الديناميكي هنا لاحقاً إذا لزم الأمر
+    }
+}
+
+// ============================================================
+// 3. النافذة والقائمة
+// ============================================================
+
 void showPopup() {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (isVerified) return;
 
-        // تصحيح 1: تحويل صريح لنمط الكنترولر (Alert Style)
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 Security Check"
-                                                                       message:@"Enter Your License Key"
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 Security"
+                                                                       message:@"Enter Key"
                                                                 preferredStyle:(UIAlertControllerStyle)1]; 
 
         [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-            textField.placeholder = @"Paste Key Here...";
-            textField.textAlignment = NSTextAlignmentCenter;
+            textField.placeholder = @"Key";
+            textField.textAlignment = 1;
             textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"SavedKey"];
         }];
 
-        // تصحيح 2: تحويل صريح لنمط الزر (Default Style)
-        UIAlertAction *verifyAction = [UIAlertAction actionWithTitle:@"Login" style:(UIAlertActionStyle)0 handler:^(UIAlertAction *action) {
+        UIAlertAction *loginAction = [UIAlertAction actionWithTitle:@"Login" style:(UIAlertActionStyle)0 handler:^(UIAlertAction *action) {
             NSString *key = alert.textFields.firstObject.text;
-            alert.message = @"جاري التحقق..."; 
-            
             checkKey(key, ^(BOOL success, NSString *msg) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (success) {
@@ -73,77 +117,40 @@ void showPopup() {
                         [[NSUserDefaults standardUserDefaults] synchronize];
                         isVerified = YES;
                         
-                        // تصحيح 3: تحويل صريح هنا أيضاً
-                        UIAlertController *sAlert = [UIAlertController alertControllerWithTitle:@"✅ Success" message:msg preferredStyle:(UIAlertControllerStyle)1];
-                        [sAlert addAction:[UIAlertAction actionWithTitle:@"Start Game" style:(UIAlertActionStyle)0 handler:nil]];
+                        // 🔥 تشغيل الهاك فوراً بعد النجاح
+                        enable_prediction(); 
                         
+                        UIAlertController *sAlert = [UIAlertController alertControllerWithTitle:@"✅ Active" message:@"Prediction Enabled!" preferredStyle:(UIAlertControllerStyle)1];
+                        [sAlert addAction:[UIAlertAction actionWithTitle:@"Play" style:(UIAlertActionStyle)0 handler:nil]];
                         [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:sAlert animated:YES completion:nil];
                     } else {
-                        // تصحيح 4
-                        UIAlertController *failAlert = [UIAlertController alertControllerWithTitle:@"❌ Error" message:msg preferredStyle:(UIAlertControllerStyle)1];
-                        [failAlert addAction:[UIAlertAction actionWithTitle:@"Try Again" style:(UIAlertActionStyle)2 handler:^(UIAlertAction *action){ // 2 = Destructive
-                            showPopup();
-                        }]];
-                        [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:failAlert animated:YES completion:nil];
+                        showPopup();
                     }
                 });
             });
         }];
 
-        // تصحيح 5: تحويل صريح لزر الشراء
-        UIAlertAction *buyAction = [UIAlertAction actionWithTitle:@"Buy Key" style:(UIAlertActionStyle)1 handler:^(UIAlertAction *action){ // 1 = Cancel
-            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://t.me/YourChannel"] options:@{} completionHandler:nil];
-            showPopup();
-        }];
-
-        [alert addAction:verifyAction];
-        [alert addAction:buyAction];
-        
-        UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
-        while (topController.presentedViewController) topController = topController.presentedViewController;
-        [topController presentViewController:alert animated:YES completion:nil];
+        [alert addAction:loginAction];
+        [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:alert animated:YES completion:nil];
     });
 }
 
 // ============================================================
-// 2. الحل: Anti-Crash & Logic Bypass (Final Hooks)
+// 4. Hooks الحماية ومنع الكراش (أساسية)
 // ============================================================
 
-// 🥇 Anti-Crash / Alert Killer
 %hook UIAlertController
-
-// استخدام NSInteger هنا لتفادي تعقيدات الهيدر (هذا صحيح ولا يسبب مشاكل)
 + (id)alertControllerWithTitle:(id)title message:(id)message preferredStyle:(NSInteger)preferredStyle {
-    
-    // فحص العنوان والمحتوى لكلمات التحقق
-    if ([title containsString:@"License"] || 
-        [title containsString:@"Update"] ||
-        [title containsString:@"Key"] ||
-        [title containsString:@"Subscription"]) {
-        
-        return nil; // نمنع إنشاء Alert التحقق نهائياً
+    if ([title containsString:@"License"] || [title containsString:@"Update"] || [title containsString:@"Key"]) {
+        return nil; 
     }
-    // لبقية الـ Alerts، نرجع الكود الأصلي
     return %orig;
 }
-
 %end
 
-// 🥈 Activation Logic Bypass
-%hook MenuManager
-- (BOOL)isProUser { return YES; } 
-- (BOOL)isVip { return YES; } 
-- (BOOL)isLogin { return YES; }
-- (BOOL)isActivated { return YES; }
-- (void)drawLoginWindow:(id)arg1 { /* NOP */ } // منع الرسم
-%end
-
-// 🥉 Safety Net
 %hook NSUserDefaults
 - (BOOL)boolForKey:(NSString *)key {
-    if ([key.lowercaseString containsString:@"vip"] || 
-        [key.lowercaseString containsString:@"key"] || 
-        [key.lowercaseString containsString:@"active"]) {
+    if ([key.lowercaseString containsString:@"vip"] || [key.lowercaseString containsString:@"active"]) {
         return YES;
     }
     return %orig;
@@ -151,7 +158,7 @@ void showPopup() {
 %end
 
 // ============================================================
-// 3. التشغيل
+// 5. التشغيل
 // ============================================================
 %ctor {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
